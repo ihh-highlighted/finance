@@ -1,10 +1,190 @@
 <!DOCTYPE html>
 <html lang="en">
+  
+  <style>
+    :root {
+    --primary: #2563eb;
+    --success: #10b981;
+    --danger: #ef4444;
+    --background: #f8fafc;
+    --card-bg: #ffffff;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --border: #e2e8f0;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--background);
+    color: var(--text-main);
+    line-height: 1.5;
+    padding: 1rem;
+}
+
+.container {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+header {
+    margin-bottom: 2rem;
+    text-align: center;
+}
+
+header h1 {
+    font-size: 2.5rem;
+    color: var(--primary);
+}
+
+header p {
+    color: var(--text-muted);
+}
+
+.card {
+    background: var(--card-bg);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    margin-bottom: 1.5rem;
+}
+
+h2 {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+    color: var(--text-muted);
+}
+
+/* Form Styles */
+.form-group {
+    margin-bottom: 1rem;
+}
+
+label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+input, select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    font-size: 1rem;
+}
+
+.btn-primary {
+    width: 100%;
+    padding: 0.75rem;
+    background-color: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.btn-primary:hover {
+    opacity: 0.9;
+}
+
+/* Dashboard Styles */
+.dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.summary {
+    margin-bottom: 0;
+}
+
+.stats {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.stat-item span {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+}
+
+.stat-item strong {
+    font-size: 1.125rem;
+}
+
+.total {
+    border-top: 1px solid var(--border);
+    padding-top: 0.5rem;
+    margin-top: 0.25rem;
+}
+
+/* Utils */
+.text-green { color: var(--success); }
+.text-red { color: var(--danger); }
+
+/* History */
+#transaction-list {
+    list-style: none;
+}
+
+.transaction-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.transaction-item:last-child {
+    border-bottom: none;
+}
+
+.transaction-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.transaction-desc {
+    font-weight: 600;
+}
+
+.transaction-date {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.transaction-amount {
+    font-weight: 700;
+}
+
+@media (max-width: 600px) {
+    .dashboard {
+        grid-template-columns: 1fr;
+    }
+}
+
+  </style>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Artha - Budget Manager (IST)</title>
-    <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -102,6 +282,208 @@
             </section>
         </main>
     </div>
-    <script src="app.js"></script>
+    <script>
+      // State management
+let transactions = JSON.parse(localStorage.getItem('transactions')) || [];
+
+// Constants for IST
+const LOCALE = 'en-IN';
+const TIMEZONE = 'Asia/Kolkata';
+
+// DOM Elements
+const form = document.getElementById('transaction-form');
+const descriptionInput = document.getElementById('description');
+const amountInput = document.getElementById('amount');
+const typeSelect = document.getElementById('type');
+const transactionList = document.getElementById('transaction-list');
+const dateDisplay = document.getElementById('current-date');
+
+// Display Totals
+const dailyPL = document.getElementById('daily-pl');
+const monthlyEarnings = document.getElementById('monthly-earnings');
+const monthlyCosts = document.getElementById('monthly-costs');
+const monthlyPL = document.getElementById('monthly-pl');
+const yearlyEarnings = document.getElementById('yearly-earnings');
+const yearlyCosts = document.getElementById('yearly-costs');
+const yearlyPL = document.getElementById('yearly-pl');
+
+let chart;
+
+// --- Date Utilities ---
+
+function getISTDate(date = new Date()) {
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: TIMEZONE,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(date);
+}
+
+function updateHeaderDate() {
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: TIMEZONE };
+    dateDisplay.textContent = new Intl.DateTimeFormat(LOCALE, options).format(new Date());
+}
+
+// --- Logic ---
+
+function addTransaction(e) {
+    e.preventDefault();
+
+    const transaction = {
+        id: Date.now(),
+        description: descriptionInput.value,
+        amount: parseFloat(amountInput.value),
+        type: typeSelect.value,
+        date: getISTDate(),
+        timestamp: Date.now()
+    };
+
+    transactions.push(transaction);
+    updateLocalStorage();
+    render();
+    form.reset();
+}
+
+function deleteTransaction(id) {
+    transactions = transactions.filter(t => t.id !== id);
+    updateLocalStorage();
+    render();
+}
+
+function updateLocalStorage() {
+    localStorage.setItem('transactions', JSON.stringify(transactions));
+}
+
+function calculateSummaries() {
+    const today = getISTDate();
+    const currentMonth = today.substring(0, 7); // YYYY-MM
+    const currentYear = today.substring(0, 4);  // YYYY
+
+    let stats = {
+        daily: 0,
+        monthly: { earn: 0, cost: 0 },
+        yearly: { earn: 0, cost: 0 }
+    };
+
+    transactions.forEach(t => {
+        const tMonth = t.date.substring(0, 7);
+        const tYear = t.date.substring(0, 4);
+
+        if (t.date === today) {
+            stats.daily += (t.type === 'earning' ? t.amount : -t.amount);
+        }
+
+        if (tMonth === currentMonth) {
+            if (t.type === 'earning') stats.monthly.earn += t.amount;
+            else stats.monthly.cost += t.amount;
+        }
+
+        if (tYear === currentYear) {
+            if (t.type === 'earning') stats.yearly.earn += t.amount;
+            else stats.yearly.cost += t.amount;
+        }
+    });
+
+    return stats;
+}
+
+// --- UI Rendering ---
+
+function updateDashboard(stats) {
+    // Daily
+    dailyPL.textContent = `₹${stats.daily.toLocaleString(LOCALE)}`;
+    dailyPL.className = stats.daily >= 0 ? 'text-green' : 'text-red';
+
+    // Monthly
+    const mPL = stats.monthly.earn - stats.monthly.cost;
+    monthlyEarnings.textContent = `₹${stats.monthly.earn.toLocaleString(LOCALE)}`;
+    monthlyCosts.textContent = `₹${stats.monthly.cost.toLocaleString(LOCALE)}`;
+    monthlyPL.textContent = `₹${mPL.toLocaleString(LOCALE)}`;
+    monthlyPL.className = mPL >= 0 ? 'text-green' : 'text-red';
+
+    // Yearly
+    const yPL = stats.yearly.earn - stats.yearly.cost;
+    yearlyEarnings.textContent = `₹${stats.yearly.earn.toLocaleString(LOCALE)}`;
+    yearlyCosts.textContent = `₹${stats.yearly.cost.toLocaleString(LOCALE)}`;
+    yearlyPL.textContent = `₹${yPL.toLocaleString(LOCALE)}`;
+    yearlyPL.className = yPL >= 0 ? 'text-green' : 'text-red';
+}
+
+function renderTransactions() {
+    transactionList.innerHTML = '';
+    
+    // Show last 5 transactions
+    [...transactions].reverse().slice(0, 5).forEach(t => {
+        const li = document.createElement('li');
+        li.className = 'transaction-item';
+        li.innerHTML = `
+            <div class="transaction-info">
+                <span class="transaction-desc">${t.description}</span>
+                <span class="transaction-date">${t.date}</span>
+            </div>
+            <div class="transaction-amount ${t.type === 'earning' ? 'text-green' : 'text-red'}">
+                ${t.type === 'earning' ? '+' : '-'}₹${t.amount.toLocaleString(LOCALE)}
+                <button onclick="deleteTransaction(${t.id})" style="margin-left: 10px; cursor: pointer; border: none; background: none; color: #64748b;">×</button>
+            </div>
+        `;
+        transactionList.appendChild(li);
+    });
+}
+
+function updateChart() {
+    const ctx = document.getElementById('budgetChart').getContext('2d');
+    const today = getISTDate();
+    const currentMonth = today.substring(0, 7);
+
+    // Group by date for the current month
+    const dailyData = {};
+    transactions.filter(t => t.date.startsWith(currentMonth)).forEach(t => {
+        if (!dailyData[t.date]) dailyData[t.date] = 0;
+        dailyData[t.date] += (t.type === 'earning' ? t.amount : -t.amount);
+    });
+
+    const labels = Object.keys(dailyData).sort();
+    const data = labels.map(l => dailyData[l]);
+
+    if (chart) chart.destroy();
+
+    chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels.map(l => l.split('-')[2]), // Just the day
+            datasets: [{
+                label: 'Daily Profit/Loss (₹)',
+                data: data,
+                borderColor: '#2563eb',
+                backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: { beginAtZero: true }
+            }
+        }
+    });
+}
+
+function render() {
+    const stats = calculateSummaries();
+    updateDashboard(stats);
+    renderTransactions();
+    updateChart();
+    updateHeaderDate();
+}
+
+// Init
+form.addEventListener('submit', addTransaction);
+render();
+updateHeaderDate();
+setInterval(updateHeaderDate, 60000); // Update every minute
+
+    </script>
 </body>
 </html>
